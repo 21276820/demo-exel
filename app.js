@@ -70,16 +70,39 @@ class DocumentEditor {
     renderDocumentsList() {
         const documentsList = document.getElementById('documentsList');
         
+        // 强制隐藏documentEditor DIV
+        const documentEditor = document.getElementById('documentEditor');
+        if (documentEditor) {
+            documentEditor.style.display = 'none';
+            documentEditor.style.height = '0px';
+            documentEditor.style.margin = '0px';
+            documentEditor.style.padding = '0px';
+            documentEditor.innerHTML = '';
+        }
+        
         if (this.documents.length === 0) {
             documentsList.innerHTML = '<p class="no-documents">暂无已上传的文档</p>';
             return;
         }
         
-        const html = this.documents.map((doc, index) => `
+        // 按最后修改时间排序，最新的在最前面
+        const sortedDocuments = [...this.documents].sort((a, b) => {
+            // 将时间字符串转换为Date对象进行比较
+            const dateA = new Date(a.lastModified);
+            const dateB = new Date(b.lastModified);
+            // 倒序排序，最新的在前
+            return dateB - dateA;
+        });
+        
+        const html = sortedDocuments.map((doc, index) => {
+            // 找到原始索引，用于打开和删除操作
+            const originalIndex = this.documents.findIndex(d => d.name === doc.name && d.lastModified === doc.lastModified);
+            
+            return `
             <div class="document-item">
                 <div class="document-item-header">
                     <div class="document-icon">
-                        ${doc.type === 'docx' ? '📄' : '📊'}
+                        ${doc.type === 'docx' ? '📄' : (doc.type === 'pdf' ? '📑' : '📊')}
                     </div>
                     <div class="document-info">
                         <div class="document-name">${doc.name}</div>
@@ -90,11 +113,12 @@ class DocumentEditor {
                     </div>
                 </div>
                 <div class="document-actions">
-                    <button class="open-btn" onclick="documentEditor.openDocument(${index})">打开</button>
-                    <button class="delete-btn" onclick="documentEditor.deleteDocument(${index})">删除</button>
+                    <button class="open-btn" onclick="documentEditor.openDocument(${originalIndex})">打开</button>
+                    <button class="delete-btn" onclick="documentEditor.deleteDocument(${originalIndex})">删除</button>
                 </div>
             </div>
-        `).join('');
+        `;
+        }).join('');
         
         documentsList.innerHTML = html;
     }
@@ -145,8 +169,8 @@ class DocumentEditor {
         this.currentFile = file;
         this.currentFileType = file.name.split('.').pop().toLowerCase();
         
-        if (!['docx', 'xlsx', 'xls'].includes(this.currentFileType)) {
-            alert('不支持的文件格式，请上传 .docx, .xlsx 或 .xls 文件');
+        if (!['docx', 'xlsx', 'xls', 'pdf'].includes(this.currentFileType)) {
+            alert('不支持的文件格式，请上传 .docx, .xlsx, .xls 或 .pdf 文件');
             return;
         }
 
@@ -171,6 +195,13 @@ class DocumentEditor {
                 this.renderWordDocument(arrayBuffer);
             };
             reader.readAsArrayBuffer(file);
+        } else if (this.currentFileType === 'pdf') {
+            reader.onload = (e) => {
+                console.log('PDF文件读取完成，开始渲染');
+                const arrayBuffer = e.target.result;
+                this.renderPdfDocument(arrayBuffer);
+            };
+            reader.readAsArrayBuffer(file);
         } else {
             reader.onload = (e) => {
                 console.log('Excel文件读取完成，开始渲染');
@@ -193,14 +224,14 @@ class DocumentEditor {
                 <div style="padding: 20px;">
                     <h3>📄 Word文档预览</h3>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0;">
-                        <div style="padding: 15px; background-color: #f8f9fa; border-radius: 8px; border: 1px solid #e9ecef;">
+                        <div style="padding: 15px; background-color: var(--light-bg); border-radius: 8px; border: 1px solid var(--border-color);">
                             <h4>文档信息</h4>
                             <p><strong>名称:</strong> ${this.currentFile.name}</p>
                             <p><strong>格式:</strong> DOCX</p>
                             <p><strong>大小:</strong> ${(this.currentFile.size / 1024).toFixed(2)} KB</p>
                             <p><strong>修改时间:</strong> ${this.currentFile.lastModifiedDate ? this.currentFile.lastModifiedDate.toLocaleString() : '未知'}</p>
                         </div>
-                        <div style="padding: 15px; background-color: #e8f5e8; border-radius: 8px; border: 1px solid #c8e6c9;">
+                        <div style="padding: 15px; background-color: var(--light-bg); border-radius: 8px; border: 1px solid var(--border-color);">
                             <h4>可用操作</h4>
                             <ul style="margin: 10px 0; padding-left: 20px;">
                                 <li>查看文档基本信息</li>
@@ -218,7 +249,7 @@ class DocumentEditor {
                     
                     <div style="margin-top: 20px;">
                         <button onclick="documentEditor.downloadOriginalDocument()" style="
-                            background-color: #28a745;
+                            background-color: var(--secondary-color);
                             color: white;
                             border: none;
                             padding: 12px 24px;
@@ -229,15 +260,15 @@ class DocumentEditor {
                             transition: background-color 0.3s ease;
                         ">📥 下载原始文档</button>
                         <button onclick="documentEditor.goBack()" style="
-                            background-color: #6c757d;
-                            color: white;
+                            background-color: var(--muted-color);
+                            color: var(--text-color);
                             border: none;
                             padding: 12px 24px;
                             font-size: 1rem;
                             border-radius: 4px;
                             cursor: pointer;
                             transition: background-color 0.3s ease;
-                        ">🔙 返回文档列表</button>
+                        ">← 返回文档列表</button>
                     </div>
                 </div>
             `;
@@ -260,6 +291,174 @@ class DocumentEditor {
             console.error('处理Word文档失败:', error);
             alert('处理Word文档失败，请重试');
         }
+    }
+    
+    renderPdfDocument(arrayBuffer) {
+        const viewer = document.getElementById('documentViewer');
+        const documentTitle = document.getElementById('documentTitle');
+        
+        try {
+            console.log('开始处理PDF文档:', this.currentFile.name);
+            
+            // 创建PDF渲染容器
+            viewer.innerHTML = `
+                <div style="padding: 20px;">
+                    <h3>📄 PDF文档预览</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0;">
+                        <div style="padding: 15px; background-color: var(--light-bg); border-radius: 8px; border: 1px solid var(--border-color);">
+                            <h4>文档信息</h4>
+                            <p><strong>名称:</strong> ${this.currentFile.name}</p>
+                            <p><strong>格式:</strong> PDF</p>
+                            <p><strong>大小:</strong> ${(this.currentFile.size / 1024).toFixed(2)} KB</p>
+                            <p><strong>修改时间:</strong> ${this.currentFile.lastModifiedDate ? this.currentFile.lastModifiedDate.toLocaleString() : '未知'}</p>
+                        </div>
+                        <div style="padding: 15px; background-color: var(--light-bg); border-radius: 8px; border: 1px solid var(--border-color);">
+                            <h4>可用操作</h4>
+                            <ul style="margin: 10px 0; padding-left: 20px;">
+                                <li>在线预览PDF内容</li>
+                                <li>将文档添加到文档列表</li>
+                                <li>下载原始文档</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div id="pdfContainer" style="
+                        margin: 20px 0;
+                        padding: 20px;
+                        background-color: #f8f9fa;
+                        border-radius: 8px;
+                        border: 1px solid #e9ecef;
+                        overflow: auto;
+                    ">
+                        <div style="text-align: center; padding: 40px;">
+                            <div style="font-size: 3rem; margin-bottom: 15px;">📄</div>
+                            <p>正在加载PDF文档，请稍候...</p>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 20px; text-align: center;">
+                        <button onclick="documentEditor.downloadOriginalDocument()" style="
+                            background-color: var(--secondary-color);
+                            color: white;
+                            border: none;
+                            padding: 12px 24px;
+                            font-size: 1rem;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            margin-right: 10px;
+                            transition: background-color 0.3s ease;
+                        ">📥 下载原始文档</button>
+                        <button onclick="documentEditor.goBack()" style="
+                            background-color: var(--muted-color);
+                            color: var(--text-color);
+                            border: none;
+                            padding: 12px 24px;
+                            font-size: 1rem;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            transition: background-color 0.3s ease;
+                        ">← 返回文档列表</button>
+                    </div>
+                </div>
+            `;
+            
+            // 渲染PDF内容
+            this.renderPdfContent(arrayBuffer);
+            
+            // 将PDF文档添加到文档列表
+            this.saveDocumentToLocal();
+            
+            // 显示文档区域
+            const uploadSection = document.querySelector('.upload-section');
+            const documentsListSection = document.querySelector('.documents-list-section');
+            const documentSection = document.getElementById('documentSection');
+            
+            uploadSection.style.display = 'none';
+            documentsListSection.style.display = 'none';
+            documentSection.style.display = 'block';
+            documentTitle.textContent = this.currentFile.name;
+            
+            console.log('PDF文档处理完成');
+        } catch (error) {
+            console.error('处理PDF文档失败:', error);
+            alert('处理PDF文档失败，请重试');
+        }
+    }
+    
+    renderPdfContent(arrayBuffer) {
+        const pdfContainer = document.getElementById('pdfContainer');
+        
+        // 设置PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        // 加载PDF文档
+        pdfjsLib.getDocument(arrayBuffer).promise.then(pdf => {
+            console.log('PDF加载成功，共', pdf.numPages, '页');
+            
+            // 清空容器
+            pdfContainer.innerHTML = '';
+            
+            // 创建页面容器
+            const pagesContainer = document.createElement('div');
+            pagesContainer.style.display = 'flex';
+            pagesContainer.style.flexDirection = 'column';
+            pagesContainer.style.alignItems = 'center';
+            pagesContainer.style.gap = '20px';
+            
+            // 渲染每一页
+            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                pdf.getPage(pageNum).then(page => {
+                    // 创建canvas元素
+                    const canvas = document.createElement('canvas');
+                    canvas.style.maxWidth = '100%';
+                    canvas.style.border = '1px solid #e0e0e0';
+                    canvas.style.borderRadius = '4px';
+                    
+                    const container = document.createElement('div');
+                    container.style.width = '100%';
+                    container.style.textAlign = 'center';
+                    container.appendChild(canvas);
+                    
+                    // 设置渲染选项
+                    const viewport = page.getViewport({ scale: 1.5 });
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                    
+                    // 渲染页面
+                    const renderContext = {
+                        canvasContext: canvas.getContext('2d'),
+                        viewport: viewport
+                    };
+                    
+                    page.render(renderContext).promise.then(() => {
+                        console.log('PDF页面', pageNum, '渲染成功');
+                    }).catch(err => {
+                        console.error('渲染PDF页面', pageNum, '失败:', err);
+                        container.innerHTML = `<div style="padding: 20px; color: #e74c3c;">页面 ${pageNum} 渲染失败</div>`;
+                    });
+                    
+                    pagesContainer.appendChild(container);
+                }).catch(err => {
+                    console.error('获取PDF页面失败:', err);
+                    const errorDiv = document.createElement('div');
+                    errorDiv.style.padding = '20px';
+                    errorDiv.style.color = '#e74c3c';
+                    errorDiv.textContent = `获取页面 ${pageNum} 失败`;
+                    pagesContainer.appendChild(errorDiv);
+                });
+            }
+            
+            pdfContainer.appendChild(pagesContainer);
+        }).catch(err => {
+            console.error('加载PDF文档失败:', err);
+            pdfContainer.innerHTML = `
+                <div style="text-align: center; padding: 40px; color: #e74c3c;">
+                    <div style="font-size: 3rem; margin-bottom: 15px;">❌</div>
+                    <p>PDF文档加载失败，请重试</p>
+                    <p style="font-size: 0.9rem; margin-top: 10px;">错误信息: ${err.message}</p>
+                </div>
+            `;
+        });
     }
 
     renderExcelDocument(data) {
@@ -311,10 +510,14 @@ class DocumentEditor {
     }
     
     hideEmptyDivs() {
-        // 专门处理documentEditor div
+        // 专门处理documentEditor div，强制隐藏
         const documentEditor = document.getElementById('documentEditor');
         if (documentEditor) {
             documentEditor.style.display = 'none';
+            documentEditor.style.height = '0px';
+            documentEditor.style.margin = '0px';
+            documentEditor.style.padding = '0px';
+            documentEditor.innerHTML = ''; // 清空内容
         }
         
         // 全局检查所有div，隐藏或移除空白div
@@ -458,6 +661,10 @@ class DocumentEditor {
                 // 对于Word文档，我们需要保存原始文件数据
                 // 这里可以根据实际需求调整保存方式
                 data = 'docx-content'; // 临时占位符
+            } else if (this.currentFileType === 'pdf') {
+                // 对于PDF文档，我们需要保存原始文件数据
+                // 这里可以根据实际需求调整保存方式
+                data = 'pdf-content'; // 临时占位符
             }
             
             // 创建文档对象
@@ -547,9 +754,11 @@ class DocumentEditor {
             // 模拟打开文档
             this.currentFile = { name: doc.name };
             this.currentFileType = doc.type;
+            const viewer = document.getElementById('documentViewer');
+            const documentTitle = document.getElementById('documentTitle');
             
-            // 如果是Excel文档，需要处理数据
             if (doc.type === 'xlsx' || doc.type === 'xls') {
+                // 如果是Excel文档，需要处理数据
                 const workbook = XLSX.read(doc.data, { type: 'base64' });
                 this.currentData = workbook;
                 
@@ -557,9 +766,84 @@ class DocumentEditor {
                 const worksheet = workbook.Sheets[firstSheetName];
                 const html = XLSX.utils.sheet_to_html(worksheet, { id: 'excelSheet' });
                 
-                const viewer = document.getElementById('documentViewer');
                 viewer.innerHTML = html;
                 this.makeExcelEditable();
+            } else if (doc.type === 'pdf') {
+                // 如果是PDF文档，显示基本信息和下载选项
+                viewer.innerHTML = `
+                    <div style="padding: 20px;">
+                        <h3>📄 PDF文档预览</h3>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0;">
+                            <div style="padding: 15px; background-color: var(--light-bg); border-radius: 8px; border: 1px solid var(--border-color);">
+                                <h4>文档信息</h4>
+                                <p><strong>名称:</strong> ${doc.name}</p>
+                                <p><strong>格式:</strong> PDF</p>
+                                <p><strong>修改时间:</strong> ${doc.lastModified}</p>
+                            </div>
+                            <div style="padding: 15px; background-color: var(--light-bg); border-radius: 8px; border: 1px solid var(--border-color);">
+                                <h4>可用操作</h4>
+                                <ul style="margin: 10px 0; padding-left: 20px;">
+                                    <li>查看文档基本信息</li>
+                                    <li>下载原始文档</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div style="padding: 20px; background-color: #fff3cd; border: 1px solid #ffeeba; border-radius: 8px; margin: 20px 0;">
+                            <h4 style="color: #856404;">📋 说明</h4>
+                            <p style="color: #856404; margin: 10px 0;">文档内容已保存在本地，您可以下载原始文件查看完整内容。</p>
+                        </div>
+                        <div style="margin-top: 20px; text-align: center;">
+                            <button onclick="documentEditor.downloadOriginalDocument()" style="
+                                background-color: #28a745;
+                                color: white;
+                                border: none;
+                                padding: 12px 24px;
+                                font-size: 1rem;
+                                border-radius: 4px;
+                                cursor: pointer;
+                                transition: background-color 0.3s ease;
+                            ">📥 下载原始文档</button>
+                        </div>
+                    </div>
+                `;
+            } else if (doc.type === 'docx') {
+                // 如果是Word文档，显示基本信息和下载选项
+                viewer.innerHTML = `
+                    <div style="padding: 20px;">
+                        <h3>📄 Word文档预览</h3>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0;">
+                            <div style="padding: 15px; background-color: var(--light-bg); border-radius: 8px; border: 1px solid var(--border-color);">
+                                <h4>文档信息</h4>
+                                <p><strong>名称:</strong> ${doc.name}</p>
+                                <p><strong>格式:</strong> DOCX</p>
+                                <p><strong>修改时间:</strong> ${doc.lastModified}</p>
+                            </div>
+                            <div style="padding: 15px; background-color: var(--light-bg); border-radius: 8px; border: 1px solid var(--border-color);">
+                                <h4>可用操作</h4>
+                                <ul style="margin: 10px 0; padding-left: 20px;">
+                                    <li>查看文档基本信息</li>
+                                    <li>下载原始文档</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div style="padding: 20px; background-color: #fff3cd; border: 1px solid #ffeeba; border-radius: 8px; margin: 20px 0;">
+                            <h4 style="color: #856404;">📋 说明</h4>
+                            <p style="color: #856404; margin: 10px 0;">文档内容已保存在本地，您可以下载原始文件查看完整内容。</p>
+                        </div>
+                        <div style="margin-top: 20px; text-align: center;">
+                            <button onclick="documentEditor.downloadOriginalDocument()" style="
+                                background-color: #28a745;
+                                color: white;
+                                border: none;
+                                padding: 12px 24px;
+                                font-size: 1rem;
+                                border-radius: 4px;
+                                cursor: pointer;
+                                transition: background-color 0.3s ease;
+                            ">📥 下载原始文档</button>
+                        </div>
+                    </div>
+                `;
             }
             
             this.showDocumentSection();

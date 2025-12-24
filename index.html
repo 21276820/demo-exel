@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/docx-preview@0.1.14/dist/docx-preview.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
     <div class="app-container">
@@ -23,10 +24,10 @@
             <section class="upload-section">
                 <h2>上传文档</h2>
                 <div class="upload-area" id="uploadArea">
-                    <input type="file" id="fileInput" accept=".docx,.xlsx,.xls" style="display: none;">
+                    <input type="file" id="fileInput" accept=".docx,.xlsx,.xls,.pdf" style="display: none;">
                     <div class="upload-content">
                         <p>点击或拖拽文件到此处上传</p>
-                        <p class="upload-hint">支持 .docx, .xlsx, .xls 格式</p>
+                        <p class="upload-hint">支持 <span style="font-weight: bold;">📄 .docx</span>, <span style="font-weight: bold;">📊 .xlsx</span>, <span style="font-weight: bold;">📊 .xls</span>, <span style="font-weight: bold;">📑 .pdf</span> 格式</p>
                         <button class="upload-btn" id="uploadBtn">选择文件</button>
                     </div>
                 </div>
@@ -43,15 +44,15 @@
                 <div class="document-header">
                     <h2 id="documentTitle">文档名称</h2>
                     <div class="document-actions">
-                        <button class="action-btn" id="saveBtn">保存</button>
-                        <button class="action-btn" id="downloadBtn">下载</button>
-                        <button class="action-btn" id="backBtn">返回</button>
+                        <button class="action-btn save-btn" id="saveBtn">💾 保存</button>
+                        <button class="action-btn download-btn" id="downloadBtn">📥 下载</button>
+                        <button class="action-btn back-btn" id="backBtn">← 返回</button>
                     </div>
                 </div>
                 
                 <div class="document-content">
                     <div id="documentViewer"></div>
-                    <div id="documentEditor"></div>
+                    <div id="documentEditor" style="display: none; height: 0; margin: 0; padding: 0;"></div>
                 </div>
             </section>
         </main>
